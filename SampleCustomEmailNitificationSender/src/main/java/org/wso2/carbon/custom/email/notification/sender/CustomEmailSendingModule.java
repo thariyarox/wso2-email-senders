@@ -1,10 +1,5 @@
 package org.wso2.carbon.custom.email.notification.sender;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
 import org.apache.axiom.om.OMAbstractFactory;
 import org.apache.axiom.om.OMElement;
 import org.apache.axis2.Constants;
@@ -20,7 +15,8 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.wso2.carbon.context.PrivilegedCarbonContext;
 import org.wso2.carbon.core.CarbonConfigurationContextFactory;
-import org.wso2.carbon.identity.mgt.internal.IdentityMgtServiceComponent;
+import org.wso2.carbon.custom.email.notification.sender.internal.CustomEmailNotificationSenderDSComponent;
+import org.wso2.carbon.identity.mgt.mail.AbstractEmailSendingModule;
 import org.wso2.carbon.identity.mgt.mail.EmailConfig;
 import org.wso2.carbon.identity.mgt.mail.Notification;
 import org.wso2.carbon.identity.mgt.util.Utils;
@@ -28,7 +24,11 @@ import org.wso2.carbon.user.api.UserStoreException;
 import org.wso2.carbon.user.core.UserCoreConstants;
 import org.wso2.carbon.user.core.claim.ClaimManager;
 import org.wso2.carbon.user.core.claim.ClaimMapping;
-import org.wso2.carbon.identity.mgt.mail.AbstractEmailSendingModule;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 public class CustomEmailSendingModule extends AbstractEmailSendingModule {
 
@@ -37,10 +37,10 @@ public class CustomEmailSendingModule extends AbstractEmailSendingModule {
     private Notification notification;
     private static List<String> carbonClaimUris = new ArrayList<String>();
 
-    //private static void initializeDefaultClaims(){
-    static{
+    static {
         try {
-            ClaimManager claimManager = (ClaimManager) IdentityMgtServiceComponent.getRealmService().getTenantUserRealm(
+            // Retrieve Claim URIs of WSO2 Claim Dialect
+            ClaimManager claimManager = (ClaimManager) CustomEmailNotificationSenderDSComponent.getRealmService().getTenantUserRealm(
                     PrivilegedCarbonContext.getThreadLocalCarbonContext().getTenantId()).getClaimManager();
 
             ClaimMapping[] claimMappings = (ClaimMapping[]) claimManager.getAllClaimMappings(
@@ -52,7 +52,7 @@ public class CustomEmailSendingModule extends AbstractEmailSendingModule {
                 }
             }
         } catch (UserStoreException e) {
-            // Ignore this if the claim URIs of default carbon dialect cannot be obtained
+            // The claim URIs of default carbon dialect cannot be obtained
             log.error("Error while obtaining claim mappings of default carbon dialect", e);
         }
     }
@@ -135,44 +135,6 @@ public class CustomEmailSendingModule extends AbstractEmailSendingModule {
             PrivilegedCarbonContext.endTenantFlow();
         }
 
-    }
-
-    /**
-     *
-     * @param emailConfig
-     * @return
-     */
-    //	private String getEmailMessage(Map<String, String> userParameters) {
-    //		StringBuffer message = new StringBuffer();
-    //		for (Map.Entry<String, String> entry : userParameters.entrySet()) {
-    //			message.append("\n" + entry.getKey() + " : " + entry.getValue());
-    //		}
-    //		return message.toString();
-    //	}
-
-    public String getRequestMessage(EmailConfig emailConfig) {
-
-        String msg;
-        String targetEpr = emailConfig.getTargetEpr();
-        if (emailConfig.getEmailBody().length() == 0) {
-            msg = EmailConfig.DEFAULT_VALUE_MESSAGE + "\n";
-            if (notificationData.getNotificationCode() != null) {
-                msg =
-                        msg + targetEpr + "?" + CONF_STRING + "=" + notificationData.getNotificationCode() +
-                        "\n";
-            }
-        } else {
-            msg = emailConfig.getEmailBody() + "\n";
-            if (notificationData.getNotificationCode() != null) {
-                //				msg =
-                //				      msg + targetEpr + "?" + CONF_STRING + "=" + notificationData.getNotificationCode() +
-                //				              "\n";
-            }
-        }
-        if (emailConfig.getEmailFooter() != null) {
-            msg = msg + "\n" + emailConfig.getEmailFooter();
-        }
-        return msg;
     }
 
     /**

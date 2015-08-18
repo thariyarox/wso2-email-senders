@@ -29,12 +29,16 @@ public class CustomEmailNotificationSenderDSComponent {
     }
 
     protected void setRealmService(RealmService realmService) {
-        log.debug("Setting the Realm Service");
+        if (log.isDebugEnabled()) {
+            log.debug("Setting the Realm Service");
+        }
         CustomEmailNotificationSenderDSComponent.realmService = realmService;
     }
 
     protected void unsetRealmService(RealmService realmService) {
-        log.debug("UnSetting the Realm Service");
+        if (log.isDebugEnabled()) {
+            log.debug("UnSetting the Realm Service");
+        }
         CustomEmailNotificationSenderDSComponent.realmService = null;
     }
 

@@ -17,7 +17,6 @@ import org.wso2.carbon.context.PrivilegedCarbonContext;
 import org.wso2.carbon.core.CarbonConfigurationContextFactory;
 import org.wso2.carbon.custom.email.notification.sender.internal.CustomEmailNotificationSenderDSComponent;
 import org.wso2.carbon.identity.mgt.mail.AbstractEmailSendingModule;
-import org.wso2.carbon.identity.mgt.mail.EmailConfig;
 import org.wso2.carbon.identity.mgt.mail.Notification;
 import org.wso2.carbon.identity.mgt.util.Utils;
 import org.wso2.carbon.user.api.UserStoreException;
@@ -32,22 +31,26 @@ import java.util.Map;
 
 public class CustomEmailSendingModule extends AbstractEmailSendingModule {
 
-    public static final String CONF_STRING = "confirmation";
     private static Log log = LogFactory.getLog(CustomEmailSendingModule.class);
     private Notification notification;
-    private static List<String> carbonClaimUris = new ArrayList<String>();
 
-    static {
+    /**
+     * Retrieve the Claim URIs of Default WSO2 Claim Dialect
+     *
+     * @return WSO2 Claim Dialect URIs
+     */
+    private List<String> getDefaultCarbonClaimUris() {
+        List<String> carbonClaimUris = new ArrayList<String>();
         try {
-            // Retrieve Claim URIs of WSO2 Claim Dialect
-            ClaimManager claimManager = (ClaimManager) CustomEmailNotificationSenderDSComponent.getRealmService().getTenantUserRealm(
-                    PrivilegedCarbonContext.getThreadLocalCarbonContext().getTenantId()).getClaimManager();
+            ClaimManager claimManager =
+                    (ClaimManager) CustomEmailNotificationSenderDSComponent.getRealmService().getTenantUserRealm(
+                            PrivilegedCarbonContext.getThreadLocalCarbonContext().getTenantId()).getClaimManager();
 
             ClaimMapping[] claimMappings = (ClaimMapping[]) claimManager.getAllClaimMappings(
                     UserCoreConstants.DEFAULT_CARBON_DIALECT);
 
-            if(claimMappings != null && claimMappings.length > 0) {
-                for(ClaimMapping claimMapping : claimMappings){
+            if (claimMappings != null && claimMappings.length > 0) {
+                for (ClaimMapping claimMapping : claimMappings) {
                     carbonClaimUris.add(claimMapping.getClaim().getClaimUri());
                 }
             }
@@ -55,26 +58,37 @@ public class CustomEmailSendingModule extends AbstractEmailSendingModule {
             // The claim URIs of default carbon dialect cannot be obtained
             log.error("Error while obtaining claim mappings of default carbon dialect", e);
         }
+
+        return carbonClaimUris;
     }
 
-    public void sendEmail(){
+    /**
+     * Send email notification to the user
+     */
+    public void sendEmail() {
 
         Map<String, String> headerMap = new HashMap<String, String>();
 
         try {
-            if(this.notification == null) {
-                throw new NullPointerException("Notification not set. Please set the notification before sending messages");
+            if (this.notification == null) {
+                throw new NullPointerException(
+                        "Notification not set. Please set the notification before sending messages");
             }
 
             String body = notification.getBody();
+
+            // Extract username and userstore domain of the user from the body
             String userId = StringUtils.substringBetween(body, "[[username-", "]]");
             String userStoreDomain = StringUtils.substringBetween(body, "[[userstore-domain-", "]]");
-            //String userTenantDomain = StringUtils.substringBetween(body, "[[tenant-domain-", "]]");
 
+            // Remove the username and userstore domain of the user from the body
             body = StringUtils.remove(body, "[[username-" + userId + "]]");
             body = StringUtils.remove(body, "[[userstore-domain-" + userStoreDomain + "]]");
-            //body = StringUtils.remove(body, "[[tenant-domain-" + userTenantDomain + "]]");
 
+            if (log.isDebugEnabled()) {
+                log.debug("Username : " + userId + " and userstore domain : " + userStoreDomain +
+                          " extracted from email body");
+            }
 
             PrivilegedCarbonContext.startTenantFlow();
 
@@ -85,19 +99,25 @@ public class CustomEmailSendingModule extends AbstractEmailSendingModule {
 
             Map<String, String> claimsMap = new HashMap<String, String>();
 
-            //get user claims
-            for(String claimUri : carbonClaimUris) {
-                String claimValue = Utils.getClaimFromUserStoreManager(userStoreDomain + "/" + userId, tenantId, claimUri);
+            if (StringUtils.isNotBlank(userId) && StringUtils.isNotBlank(userStoreDomain)) {
 
-                if(claimValue != null && claimValue.trim().length() > 0) {
-                    claimsMap.put(claimUri, claimValue);
+                // Retrieve the Default Carbon Claim Uris for the tenant
+                List<String> carbonClaimUris = getDefaultCarbonClaimUris();
+
+                // Retrieve claim values for the user
+                for (String claimUri : carbonClaimUris) {
+                    String claimValue =
+                            Utils.getClaimFromUserStoreManager(userStoreDomain + "/" + userId, tenantId, claimUri);
+
+                    if (StringUtils.isNotBlank(claimValue)) {
+                        claimsMap.put(claimUri, claimValue);
+                    }
                 }
             }
 
-            //Replace the claim uris from the notification
+            // Replace the claim uri placeholders with values from the notification body
             body = replacePlaceHolders(body, claimsMap);
             notification.setBody(body);
-
 
             headerMap.put(MailConstants.MAIL_HEADER_SUBJECT, this.notification.getSubject());
 
@@ -124,11 +144,17 @@ public class CustomEmailSendingModule extends AbstractEmailSendingModule {
                                 MailConstants.TRANSPORT_FORMAT_TEXT);
             options.setTo(new EndpointReference("mailto:" + this.notification.getSendTo()));
             serviceClient.setOptions(options);
-            log.debug("Sending " + "user credentials configuration mail to " + this.notification.getSendTo());
+
+            if (log.isDebugEnabled()) {
+                log.debug("Sending " + "user mail to " + this.notification.getSendTo());
+            }
             serviceClient.fireAndForget(payload);
 
-            log.debug("Email content : " + this.notification.getBody());
-            log.info("User credentials configuration mail has been sent to " + this.notification.getSendTo());
+            if (log.isDebugEnabled()) {
+                log.debug("Email content : " + this.notification.getBody());
+            }
+
+            log.info("Email has been sent to " + this.notification.getSendTo());
         } catch (Exception e) {
             log.error("Failed Sending Email ", e);
         } finally {
@@ -138,17 +164,14 @@ public class CustomEmailSendingModule extends AbstractEmailSendingModule {
     }
 
     /**
-     * Replace the {user-parameters} in the config file with the respective
-     * values
+     * Replace the {user-parameters} in the text with the values
      *
-     * @param text
-     *            the initial text
-     * @param userParameters
-     *            mapping of the key and its value
+     * @param text the initial text
+     * @param userParameters mapping of the key and its value
      * @return the final text to be sent in the email
      */
     public static String replacePlaceHolders(String text, Map<String, String> userParameters) {
-        if (userParameters != null) {
+        if (userParameters != null && userParameters.size() > 0) {
             for (Map.Entry<String, String> entry : userParameters.entrySet()) {
                 String key = entry.getKey();
                 if (key != null && entry.getValue() != null) {
